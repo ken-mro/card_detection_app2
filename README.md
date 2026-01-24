@@ -27,8 +27,9 @@ Visit the live demo: **https://[your-username].github.io/card_detection_app2/**
 
 1. Fork or clone this repository
 2. Go to repository Settings → Pages
-3. Set Source to "GitHub Actions"
-4. Push to main branch to trigger deployment
+3. Set Source to "Deploy from a branch"
+4. Select "main" branch and "/ (root)" folder
+5. Click Save
 
 The app will be available at `https://[your-username].github.io/[repo-name]/`
 
@@ -52,10 +53,6 @@ Install the "Live Server" extension and click "Go Live"
 ### 4. Enter Your API Key
 
 On first launch, you'll be prompted to enter your Roboflow API key. The key is stored locally in your browser.
-
-## Generating PWA Icons
-
-Open `generate-icons.html` in a browser to generate PWA icons, then save them to the `icons/` folder.
 
 ## Usage
 
