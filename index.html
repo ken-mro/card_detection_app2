@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#1a1a2e">
+    <meta name="description" content="Playing Card Detection PWA - Detect playing cards using your camera">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Card Detect">
+
+    <title>Card Detection</title>
+
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
+    <link rel="apple-touch-icon" href="icons/icon.svg">
+    <link rel="stylesheet" href="styles.css">
+
+    <!-- Inline favicon fallback -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Cdefs%3E%3ClinearGradient id='bg' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' style='stop-color:%236366f1'/%3E%3Cstop offset='100%25' style='stop-color:%234f46e5'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='512' height='512' rx='96' fill='url(%23bg)'/%3E%3Crect x='136' y='96' width='240' height='320' rx='16' fill='white'/%3E%3Cpath d='M256 180 C256 180 196 240 196 280 C196 310 220 330 250 330 C250 330 240 360 230 380 L282 380 C272 360 262 330 262 330 C292 330 316 310 316 280 C316 240 256 180 256 180 Z' fill='%231a1a2e'/%3E%3C/svg%3E">
+</head>
+<body>
+    <div id="app">
+        <!-- Header -->
+        <header class="header">
+            <h1>Card Detection</h1>
+            <span class="status-badge" id="statusBadge">Ready</span>
+        </header>
+
+        <!-- Camera View -->
+        <main class="main-content">
+            <div class="camera-container" id="cameraContainer">
+                <video id="video" autoplay playsinline muted></video>
+                <canvas id="overlay" class="overlay-canvas"></canvas>
+                <div class="detection-indicator" id="detectionIndicator">
+                    <span class="indicator-text">Detecting...</span>
+                    <div class="confidence-bar">
+                        <div class="confidence-fill" id="confidenceFill"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Result View -->
+            <div class="result-container hidden" id="resultContainer">
+                <div class="result-card">
+                    <div class="card-display" id="cardDisplay">
+                        <div class="detected-card" id="detectedCard"></div>
+                    </div>
+                    <div class="result-info">
+                        <h2 class="card-name" id="cardName">--</h2>
+                        <div class="confidence-display">
+                            <span class="confidence-label">Confidence:</span>
+                            <span class="confidence-value" id="confidenceValue">--%</span>
+                        </div>
+                    </div>
+                    <button class="btn btn-primary" id="scanAgainBtn">
+                        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M23 4v6h-6M1 20v-6h6"/>
+                            <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+                        </svg>
+                        Scan Another Card
+                    </button>
+                </div>
+            </div>
+
+            <!-- Error View -->
+            <div class="error-container hidden" id="errorContainer">
+                <div class="error-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <line x1="12" y1="8" x2="12" y2="12"/>
+                        <line x1="12" y1="16" x2="12.01" y2="16"/>
+                    </svg>
+                </div>
+                <h2 class="error-title" id="errorTitle">Camera Access Required</h2>
+                <p class="error-message" id="errorMessage">Please allow camera access to detect playing cards.</p>
+                <button class="btn btn-primary" id="retryBtn">Try Again</button>
+            </div>
+        </main>
+
+        <!-- Settings Panel -->
+        <div class="settings-panel hidden" id="settingsPanel">
+            <div class="settings-header">
+                <h2>Settings</h2>
+                <button class="close-btn" id="closeSettingsBtn">&times;</button>
+            </div>
+            <div class="settings-content">
+                <div class="setting-item">
+                    <label for="confidenceThreshold">Detection Threshold</label>
+                    <div class="setting-control">
+                        <input type="range" id="confidenceThreshold" min="50" max="95" value="75">
+                        <span id="thresholdValue">75%</span>
+                    </div>
+                </div>
+                <div class="setting-item">
+                    <label for="vibrationToggle">Vibration Feedback</label>
+                    <div class="setting-control">
+                        <label class="switch">
+                            <input type="checkbox" id="vibrationToggle" checked>
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+                <div class="setting-item">
+                    <label for="apiKeyInput">Roboflow API Key (Required)</label>
+                    <input type="password" id="apiKeyInput" class="text-input" placeholder="Enter your API key">
+                    <p class="setting-hint">
+                        Get your free API key:<br>
+                        1. Sign up at <a href="https://app.roboflow.com" target="_blank">app.roboflow.com</a><br>
+                        2. Go to Settings → API Keys<br>
+                        3. Copy your API key
+                    </p>
+                </div>
+                <button class="btn btn-secondary" id="saveSettingsBtn">Save Settings</button>
+            </div>
+        </div>
+
+        <!-- Footer Controls -->
+        <footer class="footer">
+            <button class="footer-btn" id="settingsBtn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="3"/>
+                    <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/>
+                </svg>
+                Settings
+            </button>
+        </footer>
+
+        <!-- Loading Overlay -->
+        <div class="loading-overlay" id="loadingOverlay">
+            <div class="spinner"></div>
+            <p>Initializing camera...</p>
+        </div>
+
+        <!-- Setup Wizard -->
+        <div class="setup-wizard" id="setupWizard">
+            <div class="setup-content">
+                <div class="setup-icon">
+                    <svg viewBox="0 0 512 512" width="80" height="80">
+                        <defs>
+                            <linearGradient id="setupBg" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" style="stop-color:#6366f1"/>
+                                <stop offset="100%" style="stop-color:#4f46e5"/>
+                            </linearGradient>
+                        </defs>
+                        <rect width="512" height="512" rx="96" fill="url(#setupBg)"/>
+                        <rect x="156" y="116" width="200" height="280" rx="12" fill="white"/>
+                        <path d="M256 190 C256 190 206 240 206 270 C206 295 225 310 250 310 C250 310 242 335 234 350 L278 350 C270 335 262 310 262 310 C287 310 306 295 306 270 C306 240 256 190 256 190 Z" fill="#1a1a2e"/>
+                    </svg>
+                </div>
+                <h2>Welcome to Card Detection</h2>
+                <p>To detect playing cards, you'll need a free Roboflow API key.</p>
+
+                <div class="setup-steps">
+                    <div class="setup-step">
+                        <span class="step-number">1</span>
+                        <span>Sign up at <a href="https://app.roboflow.com" target="_blank">app.roboflow.com</a></span>
+                    </div>
+                    <div class="setup-step">
+                        <span class="step-number">2</span>
+                        <span>Go to Settings → API Keys</span>
+                    </div>
+                    <div class="setup-step">
+                        <span class="step-number">3</span>
+                        <span>Copy and paste your key below</span>
+                    </div>
+                </div>
+
+                <div class="setup-input">
+                    <input type="password" id="setupApiKeyInput" class="text-input" placeholder="Paste your API key here">
+                </div>
+
+                <button class="btn btn-primary" id="startDetectionBtn">Start Detecting</button>
+                <p class="setup-note">Your API key is stored locally and never shared.</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
