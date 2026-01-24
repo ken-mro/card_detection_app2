@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generate PWA Icons</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #1a1a2e;
+            color: white;
+        }
+        h1 { margin-bottom: 20px; }
+        .icon-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .icon-item {
+            text-align: center;
+            padding: 20px;
+            background: #252540;
+            border-radius: 12px;
+        }
+        .icon-item canvas {
+            border-radius: 20%;
+            margin-bottom: 10px;
+        }
+        .icon-item a {
+            display: block;
+            color: #6366f1;
+            text-decoration: none;
+            margin-top: 8px;
+        }
+        button {
+            background: #6366f1;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px;
+        }
+        button:hover { background: #4f46e5; }
+        .instructions {
+            background: #252540;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>PWA Icon Generator</h1>
+
+    <div class="instructions">
+        <h3>Instructions:</h3>
+        <ol>
+            <li>Click "Generate All Icons" button below</li>
+            <li>Right-click each icon and "Save image as..."</li>
+            <li>Save to the <code>icons/</code> folder with the correct filename</li>
+        </ol>
+    </div>
+
+    <button onclick="generateAllIcons()">Generate All Icons</button>
+    <button onclick="downloadAll()">Download All (ZIP)</button>
+
+    <div class="icon-grid" id="iconGrid"></div>
+
+    <script>
+        const sizes = [72, 96, 128, 144, 152, 192, 384, 512];
+
+        function drawIcon(ctx, size) {
+            const scale = size / 512;
+
+            // Background gradient
+            const gradient = ctx.createLinearGradient(0, 0, size, size);
+            gradient.addColorStop(0, '#6366f1');
+            gradient.addColorStop(1, '#4f46e5');
+
+            // Rounded rectangle background
+            const radius = 96 * scale;
+            ctx.beginPath();
+            ctx.roundRect(0, 0, size, size, radius);
+            ctx.fillStyle = gradient;
+            ctx.fill();
+
+            // Card shape
+            const cardX = 136 * scale;
+            const cardY = 96 * scale;
+            const cardW = 240 * scale;
+            const cardH = 320 * scale;
+            const cardRadius = 16 * scale;
+
+            ctx.beginPath();
+            ctx.roundRect(cardX, cardY, cardW, cardH, cardRadius);
+            ctx.fillStyle = 'white';
+            ctx.fill();
+
+            // Spade symbol
+            ctx.fillStyle = '#1a1a2e';
+            ctx.beginPath();
+            const cx = 256 * scale;
+            const spadeTop = 180 * scale;
+            const spadeWidth = 60 * scale;
+            const bulbRadius = 30 * scale;
+
+            // Draw spade using bezier curves
+            ctx.moveTo(cx, spadeTop);
+            ctx.bezierCurveTo(
+                cx - spadeWidth, spadeTop + 40 * scale,
+                cx - spadeWidth, spadeTop + 80 * scale,
+                cx - spadeWidth + 10 * scale, spadeTop + 100 * scale
+            );
+            ctx.bezierCurveTo(
+                cx - spadeWidth + 30 * scale, spadeTop + 120 * scale,
+                cx - 20 * scale, spadeTop + 130 * scale,
+                cx - 6 * scale, spadeTop + 150 * scale
+            );
+            ctx.lineTo(cx - 26 * scale, spadeTop + 200 * scale);
+            ctx.lineTo(cx + 26 * scale, spadeTop + 200 * scale);
+            ctx.lineTo(cx + 6 * scale, spadeTop + 150 * scale);
+            ctx.bezierCurveTo(
+                cx + 20 * scale, spadeTop + 130 * scale,
+                cx + spadeWidth - 30 * scale, spadeTop + 120 * scale,
+                cx + spadeWidth - 10 * scale, spadeTop + 100 * scale
+            );
+            ctx.bezierCurveTo(
+                cx + spadeWidth, spadeTop + 80 * scale,
+                cx + spadeWidth, spadeTop + 40 * scale,
+                cx, spadeTop
+            );
+            ctx.fill();
+
+            // Detection corners
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+            ctx.lineWidth = 12 * scale;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+
+            const corners = [
+                [[80, 160], [80, 80], [160, 80]],     // Top-left
+                [[432, 160], [432, 80], [352, 80]],   // Top-right
+                [[80, 352], [80, 432], [160, 432]],   // Bottom-left
+                [[432, 352], [432, 432], [352, 432]]  // Bottom-right
+            ];
+
+            corners.forEach(corner => {
+                ctx.beginPath();
+                ctx.moveTo(corner[0][0] * scale, corner[0][1] * scale);
+                ctx.lineTo(corner[1][0] * scale, corner[1][1] * scale);
+                ctx.lineTo(corner[2][0] * scale, corner[2][1] * scale);
+                ctx.stroke();
+            });
+        }
+
+        function generateIcon(size) {
+            const canvas = document.createElement('canvas');
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext('2d');
+            drawIcon(ctx, size);
+            return canvas;
+        }
+
+        function generateAllIcons() {
+            const grid = document.getElementById('iconGrid');
+            grid.innerHTML = '';
+
+            sizes.forEach(size => {
+                const item = document.createElement('div');
+                item.className = 'icon-item';
+
+                const canvas = generateIcon(size);
+                item.appendChild(canvas);
+
+                const label = document.createElement('div');
+                label.textContent = `${size}x${size}`;
+                item.appendChild(label);
+
+                const link = document.createElement('a');
+                link.href = canvas.toDataURL('image/png');
+                link.download = `icon-${size}.png`;
+                link.textContent = 'Download';
+                item.appendChild(link);
+
+                grid.appendChild(item);
+            });
+        }
+
+        async function downloadAll() {
+            // Generate and trigger download for each size
+            for (const size of sizes) {
+                const canvas = generateIcon(size);
+                const link = document.createElement('a');
+                link.href = canvas.toDataURL('image/png');
+                link.download = `icon-${size}.png`;
+                link.click();
+
+                // Small delay between downloads
+                await new Promise(r => setTimeout(r, 200));
+            }
+        }
+
+        // Auto-generate on load
+        generateAllIcons();
+    </script>
+</body>
+</html>
