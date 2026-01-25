@@ -25,6 +25,8 @@ class CardDetectionApp {
         this.settings = {
             confidenceThreshold: 75,
             vibrationEnabled: true,
+            vibrationDuration: 200,
+            facingMode: 'environment',
             apiKey: ''
         };
 
@@ -167,10 +169,21 @@ class CardDetectionApp {
             document.getElementById('confidenceThreshold').value = this.settings.confidenceThreshold;
             document.getElementById('thresholdValue').textContent = `${this.settings.confidenceThreshold}%`;
             document.getElementById('vibrationToggle').checked = this.settings.vibrationEnabled;
+            document.getElementById('vibrationDuration').value = this.settings.vibrationDuration;
+            document.getElementById('vibrationDurationValue').textContent = `${(this.settings.vibrationDuration / 1000).toFixed(1)}s`;
             document.getElementById('apiKeyInput').value = this.settings.apiKey;
+
+            // Update vibration duration visibility
+            this.updateVibrationDurationVisibility();
         } catch (e) {
             console.error('Failed to load settings:', e);
         }
+    }
+
+    updateVibrationDurationVisibility() {
+        const vibrationDurationItem = document.getElementById('vibrationDurationItem');
+        const vibrationEnabled = document.getElementById('vibrationToggle').checked;
+        vibrationDurationItem.style.display = vibrationEnabled ? 'block' : 'none';
     }
 
     saveSettings() {
@@ -179,6 +192,7 @@ class CardDetectionApp {
 
             this.settings.confidenceThreshold = parseInt(document.getElementById('confidenceThreshold').value);
             this.settings.vibrationEnabled = document.getElementById('vibrationToggle').checked;
+            this.settings.vibrationDuration = parseInt(document.getElementById('vibrationDuration').value);
             this.settings.apiKey = document.getElementById('apiKeyInput').value.trim();
 
             localStorage.setItem('cardDetectionSettings', JSON.stringify(this.settings));
@@ -213,6 +227,19 @@ class CardDetectionApp {
             document.getElementById('thresholdValue').textContent = `${e.target.value}%`;
         });
 
+        // Vibration toggle
+        document.getElementById('vibrationToggle').addEventListener('change', () => {
+            this.updateVibrationDurationVisibility();
+        });
+
+        // Vibration duration slider
+        document.getElementById('vibrationDuration').addEventListener('input', (e) => {
+            document.getElementById('vibrationDurationValue').textContent = `${(e.target.value / 1000).toFixed(1)}s`;
+        });
+
+        // Camera switch button
+        document.getElementById('cameraSwitchBtn').addEventListener('click', () => this.switchCamera());
+
         // Scan again button
         document.getElementById('scanAgainBtn').addEventListener('click', () => this.resetToCamera());
 
@@ -241,7 +268,7 @@ class CardDetectionApp {
             // Request camera with optimal settings for card detection
             const constraints = {
                 video: {
-                    facingMode: { ideal: 'environment' }, // Prefer back camera
+                    facingMode: { ideal: this.settings.facingMode },
                     width: { ideal: 1280, max: 1920 },
                     height: { ideal: 720, max: 1080 },
                     frameRate: { ideal: 30, max: 60 }
@@ -298,6 +325,16 @@ class CardDetectionApp {
             this.stream = null;
         }
         this.stopDetection();
+    }
+
+    async switchCamera() {
+        // Toggle facing mode
+        this.settings.facingMode = this.settings.facingMode === 'environment' ? 'user' : 'environment';
+        localStorage.setItem('cardDetectionSettings', JSON.stringify(this.settings));
+
+        // Restart camera with new facing mode
+        this.stopCamera();
+        await this.startCamera();
     }
 
     startDetection() {
@@ -588,8 +625,9 @@ class CardDetectionApp {
 
     vibrate() {
         if (this.settings.vibrationEnabled && 'vibrate' in navigator) {
-            // Short vibration pattern: vibrate 100ms, pause 50ms, vibrate 100ms
-            navigator.vibrate([100, 50, 100]);
+            // Use configurable vibration duration
+            const duration = this.settings.vibrationDuration || 200;
+            navigator.vibrate(duration);
         }
     }
 

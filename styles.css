@@ -112,6 +112,38 @@ body {
     pointer-events: none;
 }
 
+.camera-switch-btn {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: rgba(26, 26, 46, 0.8);
+    backdrop-filter: blur(10px);
+    border: none;
+    color: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: var(--transition);
+    z-index: 10;
+}
+
+.camera-switch-btn:hover {
+    background: rgba(99, 102, 241, 0.8);
+}
+
+.camera-switch-btn:active {
+    transform: scale(0.95);
+}
+
+.camera-switch-btn svg {
+    width: 24px;
+    height: 24px;
+}
+
 .detection-indicator {
     position: absolute;
     bottom: 24px;

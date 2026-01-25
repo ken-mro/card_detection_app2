@@ -29,6 +29,13 @@
             <div class="camera-container" id="cameraContainer">
                 <video id="video" autoplay playsinline muted></video>
                 <canvas id="overlay" class="overlay-canvas"></canvas>
+                <button class="camera-switch-btn" id="cameraSwitchBtn" title="Switch Camera">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M16 3h5v5M8 21H3v-5"/>
+                        <path d="M21 3L14 10M3 21l7-7"/>
+                        <circle cx="12" cy="12" r="3"/>
+                    </svg>
+                </button>
                 <div class="detection-indicator" id="detectionIndicator">
                     <span class="indicator-text">Detecting...</span>
                     <div class="confidence-bar">
@@ -96,6 +103,13 @@
                             <input type="checkbox" id="vibrationToggle" checked>
                             <span class="slider"></span>
                         </label>
+                    </div>
+                </div>
+                <div class="setting-item" id="vibrationDurationItem">
+                    <label for="vibrationDuration">Vibration Duration</label>
+                    <div class="setting-control">
+                        <input type="range" id="vibrationDuration" min="100" max="3000" step="100" value="200">
+                        <span id="vibrationDurationValue">0.2s</span>
                     </div>
                 </div>
                 <div class="setting-item">
