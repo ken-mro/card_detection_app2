@@ -3,7 +3,7 @@
  * Provides offline caching and app shell support
  */
 
-const CACHE_NAME = 'card-detection-v1';
+const CACHE_NAME = 'card-detection-v2';
 const STATIC_ASSETS = [
     '/',
     '/index.html',
@@ -12,6 +12,11 @@ const STATIC_ASSETS = [
     '/manifest.json',
     '/icons/icon-192.png',
     '/icons/icon-512.png'
+];
+
+// Large assets cached on-demand (not during install)
+const LARGE_ASSETS = [
+    '/models/yolov8m_synthetic.onnx'
 ];
 
 // Install event - cache static assets
@@ -64,11 +69,6 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    // Skip Roboflow API calls - always go to network
-    if (url.hostname.includes('roboflow.com')) {
-        return;
-    }
-
     // Skip chrome-extension and other non-http protocols
     if (!url.protocol.startsWith('http')) {
         return;
@@ -94,6 +94,7 @@ self.addEventListener('fetch', (event) => {
                         // Clone response before caching
                         const responseToCache = response.clone();
 
+                        // Cache the response (including large model files)
                         caches.open(CACHE_NAME)
                             .then((cache) => {
                                 cache.put(request, responseToCache);

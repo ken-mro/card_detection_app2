@@ -1,6 +1,6 @@
 /**
  * Playing Card Detection PWA
- * Detects playing cards using camera with Roboflow API or local TensorFlow.js inference
+ * Uses local YOLOv8 ONNX model for real-time card detection
  */
 
 class CardDetectionApp {
@@ -26,91 +26,57 @@ class CardDetectionApp {
             confidenceThreshold: 75,
             vibrationEnabled: true,
             vibrationDuration: 200,
-            facingMode: 'environment',
-            apiKey: ''
+            facingMode: 'environment'
         };
 
         // State
         this.stream = null;
         this.isDetecting = false;
-        this.detectionInterval = null;
-        this.lastDetections = [];
+        this.animationFrameId = null;
+        this.lastFrameTime = 0;
         this.consecutiveDetections = 0;
-        this.requiredConsecutive = 2; // Require 2 consecutive detections for stability
+        this.requiredConsecutive = 1; // Immediate detection on first match
         this.lastDetectedClass = null;
         this.processingFrame = false;
+        this.modelLoaded = false;
+        this.session = null;
 
-        // Canvas for frame capture
-        this.captureCanvas = document.createElement('canvas');
-        this.captureCtx = this.captureCanvas.getContext('2d');
+        // Model configuration
+        this.modelPath = 'models/yolov8m_synthetic.onnx';
+        this.inputSize = 320; // Smaller input for faster inference
+        this.confThreshold = 0.5; // Higher threshold for faster filtering
 
-        // Card mapping
-        this.cardClasses = this.initializeCardClasses();
+        // YOLOv8 class names from the synthetic model
+        this.classNames = [
+            '10c', '10d', '10h', '10s', '2c', '2d', '2h', '2s',
+            '3c', '3d', '3h', '3s', '4c', '4d', '4h', '4s',
+            '5c', '5d', '5h', '5s', '6c', '6d', '6h', '6s',
+            '7c', '7d', '7h', '7s', '8c', '8d', '8h', '8s',
+            '9c', '9d', '9h', '9s', 'Ac', 'Ad', 'Ah', 'As',
+            'Jc', 'Jd', 'Jh', 'Js', 'Kc', 'Kd', 'Kh', 'Ks',
+            'Qc', 'Qd', 'Qh', 'Qs'
+        ];
+
+        // These will be initialized after model loads (to get actual input size)
+        this.inputCanvas = null;
+        this.inputCtx = null;
+        this.tensorBuffer = null;
+        this.pixelCount = 0;
+
+        // Card display mapping
         this.suitSymbols = {
-            'hearts': '\u2665',
-            'diamonds': '\u2666',
-            'clubs': '\u2663',
-            'spades': '\u2660',
-            'h': '\u2665',
-            'd': '\u2666',
-            'c': '\u2663',
-            's': '\u2660',
-            'H': '\u2665',
-            'D': '\u2666',
-            'C': '\u2663',
-            'S': '\u2660'
+            'c': '\u2663', 'd': '\u2666', 'h': '\u2665', 's': '\u2660'
         };
-
-        this.init();
-    }
-
-    initializeCardClasses() {
-        // Standard 52-card deck mapping
-        const suits = ['C', 'D', 'H', 'S'];
-        const suitNames = { 'C': 'Clubs', 'D': 'Diamonds', 'H': 'Hearts', 'S': 'Spades' };
-        const ranks = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
-        const rankNames = {
+        this.suitNames = {
+            'c': 'Clubs', 'd': 'Diamonds', 'h': 'Hearts', 's': 'Spades'
+        };
+        this.rankNames = {
             '2': 'Two', '3': 'Three', '4': 'Four', '5': 'Five',
             '6': 'Six', '7': 'Seven', '8': 'Eight', '9': 'Nine',
             '10': 'Ten', 'J': 'Jack', 'Q': 'Queen', 'K': 'King', 'A': 'Ace'
         };
 
-        const classes = {};
-
-        // Handle various naming conventions from different models
-        for (const suit of suits) {
-            for (const rank of ranks) {
-                // Format: "10C", "AS", "KH", etc.
-                const key1 = `${rank}${suit}`;
-                // Format: "10-C", "A-S", "K-H", etc.
-                const key2 = `${rank}-${suit}`;
-                // Format: "10c", "as", "kh", etc.
-                const key3 = `${rank}${suit.toLowerCase()}`;
-                // Format with 'of'
-                const key4 = `${rank} of ${suitNames[suit]}`;
-                // Lowercase format
-                const key5 = key1.toLowerCase();
-                // Format: "10-of-clubs"
-                const key6 = `${rank}-of-${suitNames[suit].toLowerCase()}`;
-
-                const cardInfo = {
-                    rank: rank,
-                    suit: suit.toLowerCase(),
-                    suitName: suitNames[suit],
-                    rankName: rankNames[rank],
-                    displayName: `${rankNames[rank]} of ${suitNames[suit]}`
-                };
-
-                classes[key1] = cardInfo;
-                classes[key2] = cardInfo;
-                classes[key3] = cardInfo;
-                classes[key4] = cardInfo;
-                classes[key5] = cardInfo;
-                classes[key6] = cardInfo;
-            }
-        }
-
-        return classes;
+        this.init();
     }
 
     async init() {
@@ -118,51 +84,136 @@ class CardDetectionApp {
         this.setupEventListeners();
         this.registerServiceWorker();
 
-        // Check if API key is set
-        if (!this.settings.apiKey) {
-            this.showSetupWizard();
-        } else {
-            this.hideSetupWizard();
-            await this.startCamera();
+        // Hide setup wizard (no API key needed for local model)
+        this.hideSetupWizard();
+
+        // Load model and camera in parallel for faster startup
+        const modelPromise = this.loadModel();
+        const cameraPromise = this.startCamera();
+
+        // Wait for both to complete
+        await Promise.all([modelPromise, cameraPromise]);
+
+        // Start detection if both are ready
+        if (this.modelLoaded && this.stream) {
+            this.startDetection();
         }
     }
 
-    showSetupWizard() {
-        this.setupWizard.classList.remove('hidden');
-        this.hideLoading();
+    async loadModel() {
+        this.showLoading();
+        const loadingText = document.getElementById('loadingText');
+        loadingText.textContent = 'Loading AI model...';
+
+        try {
+            // Check if ONNX Runtime is available
+            if (typeof ort === 'undefined') {
+                throw new Error('ONNX Runtime Web not loaded. Please check your internet connection.');
+            }
+
+            // Configure ONNX Runtime for maximum performance
+            ort.env.wasm.wasmPaths = 'https://unpkg.com/onnxruntime-web/dist/';
+            ort.env.wasm.numThreads = navigator.hardwareConcurrency || 4;
+            ort.env.wasm.simd = true;
+
+            loadingText.textContent = 'Downloading model (~99MB)...';
+            console.log('Fetching model from:', this.modelPath);
+
+            // Fetch model with progress tracking
+            const response = await fetch(this.modelPath);
+            if (!response.ok) {
+                throw new Error(`Failed to fetch model: ${response.status} ${response.statusText}`);
+            }
+
+            const contentLength = response.headers.get('content-length');
+            const total = contentLength ? parseInt(contentLength, 10) : 0;
+            console.log('Model size:', total, 'bytes');
+
+            // Read the response as array buffer with progress
+            const reader = response.body.getReader();
+            const chunks = [];
+            let received = 0;
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                chunks.push(value);
+                received += value.length;
+
+                if (total > 0) {
+                    const percent = Math.round((received / total) * 100);
+                    loadingText.textContent = `Downloading model... ${percent}%`;
+                }
+            }
+
+            // Combine chunks into single ArrayBuffer
+            const modelData = new Uint8Array(received);
+            let offset = 0;
+            for (const chunk of chunks) {
+                modelData.set(chunk, offset);
+                offset += chunk.length;
+            }
+
+            loadingText.textContent = 'Initializing AI model...';
+            console.log('Model downloaded, creating session...');
+
+            // Create inference session from array buffer
+            // Try WebGL (GPU) first, fallback to WASM (CPU)
+            this.session = await ort.InferenceSession.create(modelData.buffer, {
+                executionProviders: ['webgl', 'wasm'],
+                graphOptimizationLevel: 'all'
+            });
+            console.log('Using execution provider:', this.session.handler?.name || 'unknown');
+
+            // Initialize preprocessing buffers
+            this.initPreprocessing();
+
+            this.modelLoaded = true;
+            console.log('Model loaded successfully');
+            console.log('Input size:', this.inputSize);
+
+        } catch (error) {
+            console.error('Failed to load model:', error);
+            this.showError(
+                'Model Loading Failed',
+                `Could not load the AI model: ${error.message}`
+            );
+        }
+    }
+
+    initPreprocessing() {
+        // Initialize canvas and buffers for the input size
+        this.inputCanvas = document.createElement('canvas');
+        this.inputCanvas.width = this.inputSize;
+        this.inputCanvas.height = this.inputSize;
+        this.inputCtx = this.inputCanvas.getContext('2d', {
+            willReadFrequently: true,
+            alpha: false
+        });
+        this.tensorBuffer = new Float32Array(3 * this.inputSize * this.inputSize);
+        this.pixelCount = this.inputSize * this.inputSize;
     }
 
     hideSetupWizard() {
-        this.setupWizard.classList.add('hidden');
-    }
-
-    async completeSetup() {
-        const apiKeyInput = document.getElementById('setupApiKeyInput');
-        const apiKey = apiKeyInput.value.trim();
-
-        if (!apiKey) {
-            apiKeyInput.focus();
-            apiKeyInput.style.borderColor = '#ef4444';
-            return;
+        if (this.setupWizard) {
+            this.setupWizard.classList.add('hidden');
         }
-
-        // Save the API key
-        this.settings.apiKey = apiKey;
-        localStorage.setItem('cardDetectionSettings', JSON.stringify(this.settings));
-
-        // Update settings panel too
-        document.getElementById('apiKeyInput').value = apiKey;
-
-        // Hide wizard and start camera
-        this.hideSetupWizard();
-        await this.startCamera();
     }
 
     loadSettings() {
         try {
             const saved = localStorage.getItem('cardDetectionSettings');
             if (saved) {
-                this.settings = { ...this.settings, ...JSON.parse(saved) };
+                const parsed = JSON.parse(saved);
+                // Don't load apiKey since we don't need it
+                this.settings = {
+                    ...this.settings,
+                    confidenceThreshold: parsed.confidenceThreshold || 75,
+                    vibrationEnabled: parsed.vibrationEnabled !== false,
+                    vibrationDuration: parsed.vibrationDuration || 200,
+                    facingMode: parsed.facingMode || 'environment'
+                };
             }
 
             // Update UI
@@ -171,9 +222,7 @@ class CardDetectionApp {
             document.getElementById('vibrationToggle').checked = this.settings.vibrationEnabled;
             document.getElementById('vibrationDuration').value = this.settings.vibrationDuration;
             document.getElementById('vibrationDurationValue').textContent = `${(this.settings.vibrationDuration / 1000).toFixed(1)}s`;
-            document.getElementById('apiKeyInput').value = this.settings.apiKey;
 
-            // Update vibration duration visibility
             this.updateVibrationDurationVisibility();
         } catch (e) {
             console.error('Failed to load settings:', e);
@@ -183,25 +232,19 @@ class CardDetectionApp {
     updateVibrationDurationVisibility() {
         const vibrationDurationItem = document.getElementById('vibrationDurationItem');
         const vibrationEnabled = document.getElementById('vibrationToggle').checked;
-        vibrationDurationItem.style.display = vibrationEnabled ? 'block' : 'none';
+        if (vibrationDurationItem) {
+            vibrationDurationItem.style.display = vibrationEnabled ? 'block' : 'none';
+        }
     }
 
     saveSettings() {
         try {
-            const oldApiKey = this.settings.apiKey;
-
             this.settings.confidenceThreshold = parseInt(document.getElementById('confidenceThreshold').value);
             this.settings.vibrationEnabled = document.getElementById('vibrationToggle').checked;
             this.settings.vibrationDuration = parseInt(document.getElementById('vibrationDuration').value);
-            this.settings.apiKey = document.getElementById('apiKeyInput').value.trim();
 
             localStorage.setItem('cardDetectionSettings', JSON.stringify(this.settings));
             this.hideSettings();
-
-            // Restart camera if API key changed
-            if (oldApiKey !== this.settings.apiKey && this.settings.apiKey) {
-                this.resetToCamera();
-            }
         } catch (e) {
             console.error('Failed to save settings:', e);
         }
@@ -212,15 +255,6 @@ class CardDetectionApp {
         document.getElementById('settingsBtn').addEventListener('click', () => this.showSettings());
         document.getElementById('closeSettingsBtn').addEventListener('click', () => this.hideSettings());
         document.getElementById('saveSettingsBtn').addEventListener('click', () => this.saveSettings());
-
-        // Setup wizard
-        document.getElementById('startDetectionBtn').addEventListener('click', () => this.completeSetup());
-        document.getElementById('setupApiKeyInput').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') this.completeSetup();
-        });
-        document.getElementById('setupApiKeyInput').addEventListener('input', (e) => {
-            e.target.style.borderColor = ''; // Reset error state on input
-        });
 
         // Threshold slider
         document.getElementById('confidenceThreshold').addEventListener('input', (e) => {
@@ -251,27 +285,24 @@ class CardDetectionApp {
             if (document.hidden && this.isDetecting) {
                 this.stopDetection();
             } else if (!document.hidden && this.cameraContainer &&
-                       !this.cameraContainer.classList.contains('hidden') &&
-                       !this.isDetecting) {
+                !this.cameraContainer.classList.contains('hidden') &&
+                !this.isDetecting && this.modelLoaded) {
                 this.startDetection();
             }
         });
     }
 
     async startCamera() {
-        this.showLoading();
-
         try {
-            // Stop any existing stream
             this.stopCamera();
 
-            // Request camera with optimal settings for card detection
+            // Optimized constraints for faster initialization
             const constraints = {
                 video: {
                     facingMode: { ideal: this.settings.facingMode },
-                    width: { ideal: 1280, max: 1920 },
-                    height: { ideal: 720, max: 1080 },
-                    frameRate: { ideal: 30, max: 60 }
+                    width: { ideal: 640, max: 1280 },
+                    height: { ideal: 480, max: 720 },
+                    frameRate: { ideal: 30 }
                 },
                 audio: false
             };
@@ -279,28 +310,28 @@ class CardDetectionApp {
             this.stream = await navigator.mediaDevices.getUserMedia(constraints);
             this.video.srcObject = this.stream;
 
+            // Use canplay event for faster response than loadedmetadata
             await new Promise((resolve, reject) => {
-                this.video.onloadedmetadata = () => {
-                    this.video.play()
-                        .then(resolve)
-                        .catch(reject);
+                this.video.oncanplay = () => {
+                    this.video.play().then(resolve).catch(reject);
                 };
                 this.video.onerror = reject;
+                // Timeout fallback
+                setTimeout(resolve, 2000);
             });
 
-            // Set canvas sizes to match video
-            const width = this.video.videoWidth;
-            const height = this.video.videoHeight;
-
-            this.overlay.width = width;
-            this.overlay.height = height;
-            this.captureCanvas.width = width;
-            this.captureCanvas.height = height;
+            // Set overlay canvas size
+            this.overlay.width = this.video.videoWidth;
+            this.overlay.height = this.video.videoHeight;
 
             this.hideLoading();
             this.showCamera();
             this.updateStatus('Detecting', 'detecting');
-            this.startDetection();
+
+            // Start detection if model is already loaded
+            if (this.modelLoaded) {
+                this.startDetection();
+            }
 
         } catch (error) {
             console.error('Camera error:', error);
@@ -328,140 +359,193 @@ class CardDetectionApp {
     }
 
     async switchCamera() {
-        // Toggle facing mode
         this.settings.facingMode = this.settings.facingMode === 'environment' ? 'user' : 'environment';
         localStorage.setItem('cardDetectionSettings', JSON.stringify(this.settings));
-
-        // Restart camera with new facing mode
         this.stopCamera();
         await this.startCamera();
     }
 
     startDetection() {
-        if (this.isDetecting) return;
+        if (this.isDetecting || !this.modelLoaded) return;
         this.isDetecting = true;
-
-        // Run detection every 150ms for good balance of speed and performance
-        this.detectionInterval = setInterval(() => this.detectCard(), 150);
+        this.lastFrameTime = 0;
+        this.detectLoop();
     }
 
     stopDetection() {
         this.isDetecting = false;
-        if (this.detectionInterval) {
-            clearInterval(this.detectionInterval);
-            this.detectionInterval = null;
+        if (this.animationFrameId) {
+            cancelAnimationFrame(this.animationFrameId);
+            this.animationFrameId = null;
+        }
+    }
+
+    detectLoop() {
+        if (!this.isDetecting) return;
+
+        // Run detection as fast as possible
+        if (!this.processingFrame && this.video.videoWidth > 0) {
+            this.detectCard().then(() => {
+                if (this.isDetecting) {
+                    this.animationFrameId = requestAnimationFrame(() => this.detectLoop());
+                }
+            });
+        } else {
+            this.animationFrameId = requestAnimationFrame(() => this.detectLoop());
         }
     }
 
     async detectCard() {
-        if (!this.isDetecting || !this.video.videoWidth || this.processingFrame) return;
+        if (!this.modelLoaded || this.processingFrame) return;
 
         this.processingFrame = true;
+        const startTime = performance.now();
 
         try {
-            // Capture frame from video
-            this.captureCtx.drawImage(this.video, 0, 0);
+            // Preprocess image
+            const inputTensor = this.preprocessImage();
 
-            // Convert to base64 JPEG (lower quality for faster transfer)
-            const imageData = this.captureCanvas.toDataURL('image/jpeg', 0.7).split(',')[1];
+            // Run inference
+            const outputs = await this.session.run({ images: inputTensor });
 
-            // Send to Roboflow API
-            const predictions = await this.callRoboflowAPI(imageData);
+            // Get output tensor and process
+            const output = outputs[this.session.outputNames[0]];
+            const detections = this.processOutput(output);
 
-            if (predictions && predictions.length > 0) {
-                // Find best prediction above minimum threshold
-                const validPredictions = predictions.filter(p => p.confidence >= 0.3);
+            const inferenceTime = Math.round(performance.now() - startTime);
+            if (inferenceTime > 100) {
+                console.log(`Inference: ${inferenceTime}ms`);
+            }
 
-                if (validPredictions.length > 0) {
-                    const bestPrediction = validPredictions.reduce((best, current) =>
-                        current.confidence > best.confidence ? current : best
-                    );
+            if (detections.length > 0) {
+                const best = detections[0]; // Already sorted by confidence
+                const confidence = best.confidence * 100;
+                this.updateConfidenceBar(confidence);
 
-                    const confidence = bestPrediction.confidence * 100;
-                    this.updateConfidenceBar(confidence);
-
-                    // Check if same card detected consecutively
-                    if (this.lastDetectedClass === bestPrediction.class) {
-                        this.consecutiveDetections++;
-                    } else {
-                        this.consecutiveDetections = 1;
-                        this.lastDetectedClass = bestPrediction.class;
-                    }
-
-                    // Draw bounding box
-                    this.drawDetection(bestPrediction);
-
-                    // Check threshold with consecutive requirement for stability
-                    if (confidence >= this.settings.confidenceThreshold &&
-                        this.consecutiveDetections >= this.requiredConsecutive) {
-                        this.cardDetected(bestPrediction);
-                        return;
-                    }
-                } else {
-                    this.resetDetectionState();
+                // Immediate detection if threshold met
+                if (confidence >= this.settings.confidenceThreshold) {
+                    this.cardDetected(best);
+                    return;
                 }
             } else {
-                this.resetDetectionState();
+                this.updateConfidenceBar(0);
             }
 
         } catch (error) {
             console.error('Detection error:', error);
-            // Don't reset on API errors, just continue
         } finally {
             this.processingFrame = false;
         }
     }
 
-    resetDetectionState() {
-        this.updateConfidenceBar(0);
-        this.consecutiveDetections = 0;
-        this.lastDetectedClass = null;
-        this.clearOverlay();
-    }
+    preprocessImage() {
+        const videoWidth = this.video.videoWidth;
+        const videoHeight = this.video.videoHeight;
 
-    async callRoboflowAPI(imageBase64) {
-        // Check for API key
-        if (!this.settings.apiKey) {
-            throw new Error('No API key configured');
+        // Calculate scaling to fit image in input size while maintaining aspect ratio
+        const scale = Math.min(this.inputSize / videoWidth, this.inputSize / videoHeight);
+        const scaledWidth = Math.round(videoWidth * scale);
+        const scaledHeight = Math.round(videoHeight * scale);
+
+        // Calculate padding to center the image
+        const padX = (this.inputSize - scaledWidth) / 2;
+        const padY = (this.inputSize - scaledHeight) / 2;
+
+        // Store for coordinate conversion
+        this.scale = scale;
+        this.padX = padX;
+        this.padY = padY;
+
+        // Clear canvas and fill with gray (letterbox)
+        this.inputCtx.fillStyle = '#808080';
+        this.inputCtx.fillRect(0, 0, this.inputSize, this.inputSize);
+
+        // Draw scaled video frame
+        this.inputCtx.drawImage(
+            this.video,
+            0, 0, videoWidth, videoHeight,
+            padX, padY, scaledWidth, scaledHeight
+        );
+
+        // Get image data and convert to tensor
+        const imageData = this.inputCtx.getImageData(0, 0, this.inputSize, this.inputSize);
+        const data = imageData.data;
+
+        // Reuse pre-allocated buffer and optimize loop
+        const float32Data = this.tensorBuffer;
+        const pixelCount = this.pixelCount;
+
+        // Optimized NCHW conversion with single loop
+        for (let i = 0; i < pixelCount; i++) {
+            const srcIdx = i * 4;
+            float32Data[i] = data[srcIdx] * 0.00392156862745098;                 // R: /255
+            float32Data[pixelCount + i] = data[srcIdx + 1] * 0.00392156862745098; // G
+            float32Data[pixelCount * 2 + i] = data[srcIdx + 2] * 0.00392156862745098; // B
         }
 
-        // Using Roboflow's playing cards model
-        const model = 'playing-cards-ow27d';
-        const version = '4';
+        return new ort.Tensor('float32', float32Data, [1, 3, this.inputSize, this.inputSize]);
+    }
 
-        const url = `https://detect.roboflow.com/${model}/${version}?api_key=${this.settings.apiKey}&confidence=30&overlap=30`;
+    processOutput(outputTensor) {
+        // YOLOv8 output shape: [1, 56, N] where 56 = 4 (bbox) + 52 (classes)
+        const data = outputTensor.data;
+        const numClasses = this.classNames.length;
+        const numDetections = outputTensor.dims[2];
+        const confThreshold = this.confThreshold;
+        const classOffset = 4 * numDetections;
 
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded'
-            },
-            body: imageBase64
-        });
+        // Find single best detection (skip NMS for speed)
+        let bestScore = confThreshold;
+        let bestIdx = -1;
+        let bestClassIdx = 0;
 
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error('API error:', response.status, errorText);
-
-            if (response.status === 401 || response.status === 403) {
-                throw new Error('Invalid API key');
+        for (let i = 0; i < numDetections; i++) {
+            // Find max class score for this detection
+            for (let c = 0; c < numClasses; c++) {
+                const score = data[classOffset + c * numDetections + i];
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestIdx = i;
+                    bestClassIdx = c;
+                }
             }
-            throw new Error(`API error: ${response.status}`);
         }
 
-        const result = await response.json();
-        return result.predictions || [];
+        if (bestIdx === -1) return [];
+
+        // Get bounding box for best detection
+        const cx = data[bestIdx];
+        const cy = data[numDetections + bestIdx];
+        const w = data[numDetections * 2 + bestIdx];
+        const h = data[numDetections * 3 + bestIdx];
+        const halfW = w * 0.5;
+        const halfH = h * 0.5;
+
+        return [{
+            x1: cx - halfW,
+            y1: cy - halfH,
+            x2: cx + halfW,
+            y2: cy + halfH,
+            confidence: bestScore,
+            classIdx: bestClassIdx,
+            class: this.classNames[bestClassIdx]
+        }];
     }
 
-    drawDetection(prediction) {
+    drawDetection(detection) {
         const ctx = this.overlay.getContext('2d');
         ctx.clearRect(0, 0, this.overlay.width, this.overlay.height);
 
-        // Coordinates from Roboflow are center-based
-        const x = prediction.x - prediction.width / 2;
-        const y = prediction.y - prediction.height / 2;
-        const width = prediction.width;
-        const height = prediction.height;
+        // Convert coordinates from model space to video space
+        const x1 = (detection.x1 - this.padX) / this.scale;
+        const y1 = (detection.y1 - this.padY) / this.scale;
+        const x2 = (detection.x2 - this.padX) / this.scale;
+        const y2 = (detection.y2 - this.padY) / this.scale;
+
+        const x = x1;
+        const y = y1;
+        const width = x2 - x1;
+        const height = y2 - y1;
 
         // Draw bounding box with glow effect
         ctx.shadowColor = '#6366f1';
@@ -504,20 +588,20 @@ class CardDetectionApp {
         ctx.lineTo(x + width, y + height - cornerLength);
         ctx.stroke();
 
-        // Draw label background
-        const label = `${prediction.class} ${Math.round(prediction.confidence * 100)}%`;
+        // Draw label
+        const cardInfo = this.parseCardClass(detection.class);
+        const label = `${cardInfo.displayName} ${Math.round(detection.confidence * 100)}%`;
         ctx.font = 'bold 16px -apple-system, BlinkMacSystemFont, sans-serif';
         const textWidth = ctx.measureText(label).width;
         const labelPadding = 8;
         const labelHeight = 28;
-        const labelY = y - labelHeight - 4;
+        const labelY = Math.max(0, y - labelHeight - 4);
 
         ctx.fillStyle = 'rgba(99, 102, 241, 0.9)';
         ctx.beginPath();
         ctx.roundRect(x, labelY, textWidth + labelPadding * 2, labelHeight, 4);
         ctx.fill();
 
-        // Draw label text
         ctx.fillStyle = 'white';
         ctx.fillText(label, x + labelPadding, labelY + 19);
     }
@@ -530,7 +614,6 @@ class CardDetectionApp {
     updateConfidenceBar(confidence) {
         this.confidenceFill.style.width = `${Math.min(confidence, 100)}%`;
 
-        // Update color based on confidence
         if (confidence >= this.settings.confidenceThreshold) {
             this.confidenceFill.style.background = 'linear-gradient(90deg, #10b981, #059669)';
         } else if (confidence >= 50) {
@@ -540,67 +623,49 @@ class CardDetectionApp {
         }
     }
 
-    cardDetected(prediction) {
+    resetDetectionState() {
+        this.updateConfidenceBar(0);
+        this.consecutiveDetections = 0;
+        this.lastDetectedClass = null;
+        this.clearOverlay();
+    }
+
+    cardDetected(detection) {
         this.stopDetection();
         this.stopCamera();
-
-        // Vibrate device
         this.vibrate();
 
-        // Parse card info
-        const cardInfo = this.parseCardClass(prediction.class);
-        const confidence = Math.round(prediction.confidence * 100);
+        const cardInfo = this.parseCardClass(detection.class);
+        const confidence = Math.round(detection.confidence * 100);
 
-        // Update result display
         this.displayCard(cardInfo);
         this.cardName.textContent = cardInfo.displayName;
         this.confidenceValue.textContent = `${confidence}%`;
 
-        // Show result
         this.showResult();
         this.updateStatus('Detected', 'ready');
     }
 
     parseCardClass(className) {
-        // Try direct lookup first
-        if (this.cardClasses[className]) {
-            return this.cardClasses[className];
-        }
+        // Parse class names like "10c", "Ac", "Kh", etc.
+        const match = className.match(/^(10|[2-9]|[AJQK])([cdhs])$/i);
 
-        // Normalize the class name
-        let normalized = className.toUpperCase().replace(/[-_\s]/g, '');
-
-        // Try normalized lookup
-        if (this.cardClasses[normalized]) {
-            return this.cardClasses[normalized];
-        }
-
-        // Match patterns like "10H", "AS", "KD", etc.
-        const match = normalized.match(/^(10|[2-9]|J|Q|K|A)([HDCS])$/);
         if (match) {
-            const rank = match[1];
-            const suit = match[2];
-            const key = `${rank}${suit}`;
-            if (this.cardClasses[key]) {
-                return this.cardClasses[key];
-            }
+            const rank = match[1].toUpperCase();
+            const suit = match[2].toLowerCase();
+
+            return {
+                rank: rank,
+                suit: suit,
+                suitName: this.suitNames[suit],
+                rankName: this.rankNames[rank],
+                displayName: `${this.rankNames[rank]} of ${this.suitNames[suit]}`
+            };
         }
 
-        // Try reverse pattern (suit first)
-        const reverseMatch = normalized.match(/^([HDCS])(10|[2-9]|J|Q|K|A)$/);
-        if (reverseMatch) {
-            const suit = reverseMatch[1];
-            const rank = reverseMatch[2];
-            const key = `${rank}${suit}`;
-            if (this.cardClasses[key]) {
-                return this.cardClasses[key];
-            }
-        }
-
-        // Fallback: return raw class name
         return {
             rank: '?',
-            suit: 'spades',
+            suit: 's',
             suitName: 'Unknown',
             rankName: className,
             displayName: className
@@ -610,10 +675,8 @@ class CardDetectionApp {
     displayCard(cardInfo) {
         const suitSymbol = this.suitSymbols[cardInfo.suit] || '?';
         const rank = cardInfo.rank;
-        const isRed = cardInfo.suit === 'h' || cardInfo.suit === 'hearts' ||
-                      cardInfo.suit === 'd' || cardInfo.suit === 'diamonds';
+        const isRed = cardInfo.suit === 'h' || cardInfo.suit === 'd';
 
-        // Add suit class for color
         this.cardDisplay.className = 'detected-card ' + (isRed ? 'red-suit' : 'black-suit');
 
         this.cardDisplay.innerHTML = `
@@ -625,7 +688,6 @@ class CardDetectionApp {
 
     vibrate() {
         if (this.settings.vibrationEnabled && 'vibrate' in navigator) {
-            // Use configurable vibration duration
             const duration = this.settings.vibrationDuration || 200;
             navigator.vibrate(duration);
         }
@@ -680,73 +742,31 @@ class CardDetectionApp {
     resetToCamera() {
         this.consecutiveDetections = 0;
         this.lastDetectedClass = null;
-        this.lastDetections = [];
         this.showCamera();
         this.startCamera();
     }
 
-    // PWA Support
     async registerServiceWorker() {
         if ('serviceWorker' in navigator) {
             try {
                 const registration = await navigator.serviceWorker.register('service-worker.js');
                 console.log('ServiceWorker registered:', registration.scope);
-
-                // Check for updates
-                registration.addEventListener('updatefound', () => {
-                    console.log('New service worker available');
-                });
             } catch (error) {
                 console.error('ServiceWorker registration failed:', error);
             }
         }
-
-        // Handle PWA install prompt
-        window.addEventListener('beforeinstallprompt', (e) => {
-            e.preventDefault();
-            this.deferredPrompt = e;
-            this.showInstallBanner();
-        });
-    }
-
-    showInstallBanner() {
-        // Check if already shown recently
-        const lastShown = localStorage.getItem('installBannerShown');
-        if (lastShown && Date.now() - parseInt(lastShown) < 86400000) { // 24 hours
-            return;
-        }
-
-        const banner = document.createElement('div');
-        banner.className = 'install-banner';
-        banner.innerHTML = `
-            <div class="install-banner-text">
-                <strong>Install App</strong>
-                <span>Add to home screen for quick access</span>
-            </div>
-            <button class="btn btn-primary install-btn">Install</button>
-            <button class="close-btn dismiss-btn">&times;</button>
-        `;
-
-        document.body.appendChild(banner);
-
-        banner.querySelector('.install-btn').addEventListener('click', async () => {
-            if (this.deferredPrompt) {
-                this.deferredPrompt.prompt();
-                const result = await this.deferredPrompt.userChoice;
-                console.log('Install prompt result:', result.outcome);
-                this.deferredPrompt = null;
-            }
-            banner.remove();
-        });
-
-        banner.querySelector('.dismiss-btn').addEventListener('click', () => {
-            localStorage.setItem('installBannerShown', Date.now().toString());
-            banner.remove();
-        });
     }
 }
 
 // Initialize app when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
+    if (typeof ort === 'undefined') {
+        const loadingText = document.getElementById('loadingText');
+        if (loadingText) {
+            loadingText.textContent = 'Error: AI library failed to load. Please refresh.';
+        }
+        return;
+    }
+
     window.cardApp = new CardDetectionApp();
 });
