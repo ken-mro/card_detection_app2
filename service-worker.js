@@ -14,11 +14,6 @@ const STATIC_ASSETS = [
     '/icons/icon-512.png'
 ];
 
-// Large assets cached on-demand (not during install)
-const LARGE_ASSETS = [
-    '/models/yolov8m_synthetic.onnx'
-];
-
 // Install event - cache static assets
 self.addEventListener('install', (event) => {
     console.log('[ServiceWorker] Install');
@@ -124,54 +119,4 @@ async function updateCache(request) {
     } catch (error) {
         // Silently fail - we have cached version
     }
-}
-
-// Handle push notifications (for future use)
-self.addEventListener('push', (event) => {
-    if (event.data) {
-        const data = event.data.json();
-        const options = {
-            body: data.body || 'Card Detection Update',
-            icon: '/icons/icon-192.png',
-            badge: '/icons/icon-192.png',
-            vibrate: [100, 50, 100]
-        };
-
-        event.waitUntil(
-            self.registration.showNotification(data.title || 'Card Detection', options)
-        );
-    }
-});
-
-// Handle notification clicks
-self.addEventListener('notificationclick', (event) => {
-    event.notification.close();
-
-    event.waitUntil(
-        clients.matchAll({ type: 'window', includeUncontrolled: true })
-            .then((windowClients) => {
-                // Focus existing window if available
-                for (const client of windowClients) {
-                    if ('focus' in client) {
-                        return client.focus();
-                    }
-                }
-                // Open new window
-                if (clients.openWindow) {
-                    return clients.openWindow('/');
-                }
-            })
-    );
-});
-
-// Background sync (for future use)
-self.addEventListener('sync', (event) => {
-    if (event.tag === 'sync-detections') {
-        event.waitUntil(syncDetections());
-    }
-});
-
-async function syncDetections() {
-    // Placeholder for syncing detection history
-    console.log('[ServiceWorker] Syncing detections...');
 }
