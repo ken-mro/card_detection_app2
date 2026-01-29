@@ -19,24 +19,22 @@ class CardDetectionApp {
         this.cardName = document.getElementById('cardName');
         this.confidenceValue = document.getElementById('confidenceValue');
         this.settingsPanel = document.getElementById('settingsPanel');
-        this.setupWizard = document.getElementById('setupWizard');
 
         // Settings
         this.settings = {
             confidenceThreshold: 75,
             vibrationEnabled: true,
             vibrationDuration: 200,
-            facingMode: 'environment'
+            facingMode: 'environment',
+            autoUpdateEnabled: false,
+            apiEndpoint: '',
+            apiKey: ''
         };
 
         // State
         this.stream = null;
         this.isDetecting = false;
         this.animationFrameId = null;
-        this.lastFrameTime = 0;
-        this.consecutiveDetections = 0;
-        this.requiredConsecutive = 1; // Immediate detection on first match
-        this.lastDetectedClass = null;
         this.processingFrame = false;
         this.modelLoaded = false;
         this.session = null;
@@ -83,9 +81,6 @@ class CardDetectionApp {
         this.loadSettings();
         this.setupEventListeners();
         this.registerServiceWorker();
-
-        // Hide setup wizard (no API key needed for local model)
-        this.hideSetupWizard();
 
         // Load model first, then start camera
         // This ensures detection works immediately when camera shows
@@ -195,24 +190,20 @@ class CardDetectionApp {
         this.pixelCount = this.inputSize * this.inputSize;
     }
 
-    hideSetupWizard() {
-        if (this.setupWizard) {
-            this.setupWizard.classList.add('hidden');
-        }
-    }
-
     loadSettings() {
         try {
             const saved = localStorage.getItem('cardDetectionSettings');
             if (saved) {
                 const parsed = JSON.parse(saved);
-                // Don't load apiKey since we don't need it
                 this.settings = {
                     ...this.settings,
                     confidenceThreshold: parsed.confidenceThreshold || 75,
                     vibrationEnabled: parsed.vibrationEnabled !== false,
                     vibrationDuration: parsed.vibrationDuration || 200,
-                    facingMode: parsed.facingMode || 'environment'
+                    facingMode: parsed.facingMode || 'environment',
+                    autoUpdateEnabled: parsed.autoUpdateEnabled || false,
+                    apiEndpoint: parsed.apiEndpoint || '',
+                    apiKey: parsed.apiKey || ''
                 };
             }
 
@@ -222,8 +213,12 @@ class CardDetectionApp {
             document.getElementById('vibrationToggle').checked = this.settings.vibrationEnabled;
             document.getElementById('vibrationDuration').value = this.settings.vibrationDuration;
             document.getElementById('vibrationDurationValue').textContent = `${(this.settings.vibrationDuration / 1000).toFixed(1)}s`;
+            document.getElementById('autoUpdateToggle').checked = this.settings.autoUpdateEnabled;
+            document.getElementById('apiEndpoint').value = this.settings.apiEndpoint;
+            document.getElementById('apiKey').value = this.settings.apiKey;
 
             this.updateVibrationDurationVisibility();
+            this.updateApiFieldsVisibility();
         } catch (e) {
             console.error('Failed to load settings:', e);
         }
@@ -237,11 +232,26 @@ class CardDetectionApp {
         }
     }
 
+    updateApiFieldsVisibility() {
+        const apiEndpointItem = document.getElementById('apiEndpointItem');
+        const apiKeyItem = document.getElementById('apiKeyItem');
+        const autoUpdateEnabled = document.getElementById('autoUpdateToggle').checked;
+        if (apiEndpointItem) {
+            apiEndpointItem.style.display = autoUpdateEnabled ? 'block' : 'none';
+        }
+        if (apiKeyItem) {
+            apiKeyItem.style.display = autoUpdateEnabled ? 'block' : 'none';
+        }
+    }
+
     saveSettings() {
         try {
             this.settings.confidenceThreshold = parseInt(document.getElementById('confidenceThreshold').value);
             this.settings.vibrationEnabled = document.getElementById('vibrationToggle').checked;
             this.settings.vibrationDuration = parseInt(document.getElementById('vibrationDuration').value);
+            this.settings.autoUpdateEnabled = document.getElementById('autoUpdateToggle').checked;
+            this.settings.apiEndpoint = document.getElementById('apiEndpoint').value.trim();
+            this.settings.apiKey = document.getElementById('apiKey').value;
 
             localStorage.setItem('cardDetectionSettings', JSON.stringify(this.settings));
             this.hideSettings();
@@ -264,6 +274,11 @@ class CardDetectionApp {
         // Vibration toggle
         document.getElementById('vibrationToggle').addEventListener('change', () => {
             this.updateVibrationDurationVisibility();
+        });
+
+        // Auto update toggle
+        document.getElementById('autoUpdateToggle').addEventListener('change', () => {
+            this.updateApiFieldsVisibility();
         });
 
         // Vibration duration slider
@@ -374,7 +389,6 @@ class CardDetectionApp {
     startDetection() {
         if (this.isDetecting || !this.modelLoaded) return;
         this.isDetecting = true;
-        this.lastFrameTime = 0;
         this.detectLoop();
     }
 
@@ -549,85 +563,6 @@ class CardDetectionApp {
         }];
     }
 
-    drawDetection(detection) {
-        const ctx = this.overlay.getContext('2d');
-        ctx.clearRect(0, 0, this.overlay.width, this.overlay.height);
-
-        // Convert coordinates from model space to video space
-        const x1 = (detection.x1 - this.padX) / this.scale;
-        const y1 = (detection.y1 - this.padY) / this.scale;
-        const x2 = (detection.x2 - this.padX) / this.scale;
-        const y2 = (detection.y2 - this.padY) / this.scale;
-
-        const x = x1;
-        const y = y1;
-        const width = x2 - x1;
-        const height = y2 - y1;
-
-        // Draw bounding box with glow effect
-        ctx.shadowColor = '#6366f1';
-        ctx.shadowBlur = 10;
-        ctx.strokeStyle = '#6366f1';
-        ctx.lineWidth = 3;
-        ctx.strokeRect(x, y, width, height);
-        ctx.shadowBlur = 0;
-
-        // Draw corner accents
-        const cornerLength = Math.min(width, height) * 0.2;
-        ctx.lineWidth = 4;
-        ctx.strokeStyle = '#10b981';
-
-        // Top-left
-        ctx.beginPath();
-        ctx.moveTo(x, y + cornerLength);
-        ctx.lineTo(x, y);
-        ctx.lineTo(x + cornerLength, y);
-        ctx.stroke();
-
-        // Top-right
-        ctx.beginPath();
-        ctx.moveTo(x + width - cornerLength, y);
-        ctx.lineTo(x + width, y);
-        ctx.lineTo(x + width, y + cornerLength);
-        ctx.stroke();
-
-        // Bottom-left
-        ctx.beginPath();
-        ctx.moveTo(x, y + height - cornerLength);
-        ctx.lineTo(x, y + height);
-        ctx.lineTo(x + cornerLength, y + height);
-        ctx.stroke();
-
-        // Bottom-right
-        ctx.beginPath();
-        ctx.moveTo(x + width - cornerLength, y + height);
-        ctx.lineTo(x + width, y + height);
-        ctx.lineTo(x + width, y + height - cornerLength);
-        ctx.stroke();
-
-        // Draw label
-        const cardInfo = this.parseCardClass(detection.class);
-        const label = `${cardInfo.displayName} ${Math.round(detection.confidence * 100)}%`;
-        ctx.font = 'bold 16px -apple-system, BlinkMacSystemFont, sans-serif';
-        const textWidth = ctx.measureText(label).width;
-        const labelPadding = 8;
-        const labelHeight = 28;
-        const labelY = Math.max(0, y - labelHeight - 4);
-
-        ctx.fillStyle = 'rgba(99, 102, 241, 0.9)';
-        ctx.beginPath();
-        ctx.roundRect(x, labelY, textWidth + labelPadding * 2, labelHeight, 4);
-        ctx.fill();
-
-        ctx.fillStyle = 'white';
-        ctx.fillText(label, x + labelPadding, labelY + 19);
-    }
-
-    clearOverlay() {
-        const ctx = this.overlay.getContext('2d');
-        ctx.clearRect(0, 0, this.overlay.width, this.overlay.height);
-    }
-
     updateConfidenceBar(confidence) {
         this.confidenceFill.style.width = `${Math.min(confidence, 100)}%`;
 
@@ -638,13 +573,6 @@ class CardDetectionApp {
         } else {
             this.confidenceFill.style.background = 'linear-gradient(90deg, #6366f1, #4f46e5)';
         }
-    }
-
-    resetDetectionState() {
-        this.updateConfidenceBar(0);
-        this.consecutiveDetections = 0;
-        this.lastDetectedClass = null;
-        this.clearOverlay();
     }
 
     cardDetected(detection) {
@@ -661,6 +589,11 @@ class CardDetectionApp {
 
         this.showResult();
         this.updateStatus('Detected', 'ready');
+
+        // Send to API if auto-update is enabled
+        if (this.settings.autoUpdateEnabled && this.settings.apiEndpoint) {
+            this.sendCardToApi(cardInfo);
+        }
     }
 
     parseCardClass(className) {
@@ -710,6 +643,58 @@ class CardDetectionApp {
         }
     }
 
+    async sendCardToApi(cardInfo) {
+        const apiStatus = document.getElementById('apiStatus');
+        const apiStatusText = document.getElementById('apiStatusText');
+
+        // Show sending status
+        apiStatus.className = 'api-status sending';
+        apiStatusText.textContent = 'Sending...';
+
+        // Map suit: d=1, c=2, h=3, s=4
+        const suitMap = { 'd': '1', 'c': '2', 'h': '3', 's': '4' };
+        const suit = suitMap[cardInfo.suit] || '1';
+
+        // Map rank: A=1, 2-9, 10=a, J=b, Q=c, K=d
+        const rankMap = {
+            'A': '1', '2': '2', '3': '3', '4': '4', '5': '5',
+            '6': '6', '7': '7', '8': '8', '9': '9', '10': 'a',
+            'J': 'b', 'Q': 'c', 'K': 'd'
+        };
+        const rank = rankMap[cardInfo.rank] || '1';
+
+        const body = JSON.stringify({ suit, rank });
+        console.log('Sending to API:', this.settings.apiEndpoint, body);
+
+        try {
+            const response = await fetch(this.settings.apiEndpoint, {
+                method: 'POST',
+                mode: 'cors',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': this.settings.apiKey
+                },
+                body: body
+            });
+
+            if (response.ok) {
+                apiStatus.className = 'api-status success';
+                apiStatusText.textContent = 'Sent';
+                console.log('API request succeeded');
+            } else {
+                apiStatus.className = 'api-status error';
+                apiStatusText.textContent = 'Failed';
+                console.error('API request failed:', response.status, response.statusText);
+            }
+        } catch (error) {
+            apiStatus.className = 'api-status error';
+            apiStatusText.textContent = 'CORS Error';
+            console.error('API request error (likely CORS):', error.message);
+            console.error('The API server needs to allow cross-origin requests.');
+            console.error('Add these headers to your API: Access-Control-Allow-Origin, Access-Control-Allow-Headers');
+        }
+    }
+
     // UI State Management
     showCamera() {
         this.cameraContainer.classList.remove('hidden');
@@ -721,6 +706,14 @@ class CardDetectionApp {
         this.cameraContainer.classList.add('hidden');
         this.resultContainer.classList.remove('hidden');
         this.errorContainer.classList.add('hidden');
+
+        // Show/hide API status based on auto-update setting
+        const apiStatus = document.getElementById('apiStatus');
+        if (this.settings.autoUpdateEnabled && this.settings.apiEndpoint) {
+            apiStatus.classList.remove('hidden');
+        } else {
+            apiStatus.classList.add('hidden');
+        }
     }
 
     showError(title, message) {
@@ -766,8 +759,6 @@ class CardDetectionApp {
     }
 
     resetToCamera() {
-        this.consecutiveDetections = 0;
-        this.lastDetectedClass = null;
         this.showCamera();
         this.startCamera();
     }

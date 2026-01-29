@@ -59,6 +59,10 @@
                             <span class="confidence-label">Confidence:</span>
                             <span class="confidence-value" id="confidenceValue">--%</span>
                         </div>
+                        <div class="api-status hidden" id="apiStatus">
+                            <span class="api-status-icon" id="apiStatusIcon"></span>
+                            <span class="api-status-text" id="apiStatusText"></span>
+                        </div>
                     </div>
                     <button class="btn btn-primary" id="scanAgainBtn">
                         <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -114,6 +118,23 @@
                         <input type="range" id="vibrationDuration" min="100" max="3000" step="100" value="200">
                         <span id="vibrationDurationValue">0.2s</span>
                     </div>
+                </div>
+                <div class="setting-item">
+                    <label for="autoUpdateToggle">Auto Update API</label>
+                    <div class="setting-control">
+                        <label class="switch">
+                            <input type="checkbox" id="autoUpdateToggle">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+                <div class="setting-item" id="apiEndpointItem">
+                    <label for="apiEndpoint">API Endpoint</label>
+                    <input type="text" id="apiEndpoint" class="text-input" placeholder="https://example.com/api/cards">
+                </div>
+                <div class="setting-item" id="apiKeyItem">
+                    <label for="apiKey">API Key</label>
+                    <input type="password" id="apiKey" class="text-input" placeholder="Enter your API key">
                 </div>
                 <button class="btn btn-secondary" id="saveSettingsBtn">Save Settings</button>
             </div>

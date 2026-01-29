@@ -1,5 +1,7 @@
 /* CSS Reset and Variables */
-*, *::before, *::after {
+*,
+*::before,
+*::after {
     box-sizing: border-box;
     margin: 0;
     padding: 0;
@@ -21,7 +23,8 @@
     --transition: 0.3s ease;
 }
 
-html, body {
+html,
+body {
     height: 100%;
     overflow: hidden;
 }
@@ -222,17 +225,26 @@ body {
         transform: scale(0.5) rotateY(90deg);
         opacity: 0;
     }
+
     100% {
         transform: scale(1) rotateY(0deg);
         opacity: 1;
     }
 }
 
-.detected-card.hearts, .detected-card.diamonds, .detected-card.red-suit, .detected-card.h, .detected-card.d {
+.detected-card.hearts,
+.detected-card.diamonds,
+.detected-card.red-suit,
+.detected-card.h,
+.detected-card.d {
     color: #dc2626;
 }
 
-.detected-card.spades, .detected-card.clubs, .detected-card.black-suit, .detected-card.s, .detected-card.c {
+.detected-card.spades,
+.detected-card.clubs,
+.detected-card.black-suit,
+.detected-card.s,
+.detected-card.c {
     color: #1a1a2e;
 }
 
@@ -277,6 +289,62 @@ body {
     color: var(--success);
     font-weight: 600;
     margin-left: 4px;
+}
+
+/* API Status Indicator */
+.api-status {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 12px;
+    font-size: 0.875rem;
+}
+
+.api-status.hidden {
+    display: none;
+}
+
+.api-status-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+}
+
+.api-status.sending .api-status-icon::before {
+    content: "";
+    width: 14px;
+    height: 14px;
+    border: 2px solid var(--text-secondary);
+    border-top-color: var(--primary-color);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+.api-status.sending .api-status-text {
+    color: var(--text-secondary);
+}
+
+.api-status.success .api-status-icon::before {
+    content: "\2713";
+    color: var(--success);
+    font-weight: bold;
+}
+
+.api-status.success .api-status-text {
+    color: var(--success);
+}
+
+.api-status.error .api-status-icon::before {
+    content: "\2717";
+    color: var(--error);
+    font-weight: bold;
+}
+
+.api-status.error .api-status-text {
+    color: var(--error);
 }
 
 /* Error Container */
@@ -467,11 +535,11 @@ body {
     border-radius: 50%;
 }
 
-input:checked + .slider {
+input:checked+.slider {
     background-color: var(--primary-color);
 }
 
-input:checked + .slider::before {
+input:checked+.slider::before {
     transform: translateX(22px);
 }
 
@@ -620,6 +688,7 @@ input:checked + .slider::before {
         transform: translateY(100%);
         opacity: 0;
     }
+
     to {
         transform: translateY(0);
         opacity: 1;
@@ -708,7 +777,7 @@ input:checked + .slider::before {
     letter-spacing: -0.025em;
 }
 
-.setup-content > p {
+.setup-content>p {
     color: var(--text-secondary);
     margin-bottom: 32px;
 }
