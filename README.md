@@ -16,6 +16,7 @@ Visit the live demo: **https://[your-username].github.io/card_detection_app2/**
 - Configurable vibration duration (up to 3 seconds)
 - Configurable confidence threshold (default: 75%)
 - Front/back camera switching
+- **API Auto-Update**: Automatically send detected card data to a configured API endpoint
 - Clean, mobile-first UI
 
 ## Setup
@@ -62,15 +63,27 @@ Click the Settings button to:
 - Adjust the detection confidence threshold
 - Enable/disable vibration feedback
 - Adjust vibration duration
+- **Auto Update API**: Enable automatic sending of detected cards to an external API
+  - API Endpoint: URL to receive POST requests
+  - API Key: Authentication key sent via `x-api-key` header
+
+### API Auto-Update Format
+
+When enabled, detected cards are sent as POST requests with:
+- Header: `x-api-key` (your configured API key)
+- Header: `Content-Type: application/json`
+- Body: `{"suit": "1-4", "rank": "1-9,a-d"}`
+  - Suit: 1=Diamonds, 2=Clubs, 3=Hearts, 4=Spades
+  - Rank: 1=Ace, 2-9, a=10, b=Jack, c=Queen, d=King
 
 ## Technical Details
 
 - Uses ONNX Runtime Web for local model inference
 - YOLOv8m model trained on synthetic playing card data
-- Detection runs every 200ms for responsive real-time detection
-- Requires 2 consecutive detections of the same card for stability
+- Detection runs continuously for real-time responsiveness
+- Immediate detection when confidence threshold is met
 - Model size: ~99MB (cached after first load for offline use)
-- Input resolution: 640x640 pixels
+- Input resolution: 320x320 pixels (optimized for speed)
 
 ## Browser Support
 
