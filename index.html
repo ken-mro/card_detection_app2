@@ -15,6 +15,9 @@
     <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
     <link rel="apple-touch-icon" href="icons/icon-192.png">
     <link rel="stylesheet" href="styles.css">
+
+    <!-- ONNX Runtime Web for local model inference -->
+    <script src="https://unpkg.com/onnxruntime-web/dist/ort.min.js"></script>
 </head>
 <body>
     <div id="app">
@@ -55,6 +58,10 @@
                         <div class="confidence-display">
                             <span class="confidence-label">Confidence:</span>
                             <span class="confidence-value" id="confidenceValue">--%</span>
+                        </div>
+                        <div class="api-status hidden" id="apiStatus">
+                            <span class="api-status-icon" id="apiStatusIcon"></span>
+                            <span class="api-status-text" id="apiStatusText"></span>
                         </div>
                     </div>
                     <button class="btn btn-primary" id="scanAgainBtn">
@@ -113,14 +120,21 @@
                     </div>
                 </div>
                 <div class="setting-item">
-                    <label for="apiKeyInput">Roboflow API Key (Required)</label>
-                    <input type="password" id="apiKeyInput" class="text-input" placeholder="Enter your API key">
-                    <p class="setting-hint">
-                        Get your free API key:<br>
-                        1. Sign up at <a href="https://app.roboflow.com" target="_blank">app.roboflow.com</a><br>
-                        2. Go to Settings → API Keys<br>
-                        3. Copy your API key
-                    </p>
+                    <label for="autoUpdateToggle">Auto Update API</label>
+                    <div class="setting-control">
+                        <label class="switch">
+                            <input type="checkbox" id="autoUpdateToggle">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+                <div class="setting-item" id="apiEndpointItem">
+                    <label for="apiEndpoint">API Endpoint</label>
+                    <input type="text" id="apiEndpoint" class="text-input" placeholder="https://example.com/api/cards">
+                </div>
+                <div class="setting-item" id="apiKeyItem">
+                    <label for="apiKey">API Key</label>
+                    <input type="password" id="apiKey" class="text-input" placeholder="Enter your API key">
                 </div>
                 <button class="btn btn-secondary" id="saveSettingsBtn">Save Settings</button>
             </div>
@@ -140,51 +154,9 @@
         <!-- Loading Overlay -->
         <div class="loading-overlay" id="loadingOverlay">
             <div class="spinner"></div>
-            <p>Initializing camera...</p>
+            <p id="loadingText">Loading model...</p>
         </div>
 
-        <!-- Setup Wizard -->
-        <div class="setup-wizard" id="setupWizard">
-            <div class="setup-content">
-                <div class="setup-icon">
-                    <svg viewBox="0 0 512 512" width="80" height="80">
-                        <defs>
-                            <linearGradient id="setupBg" x1="0%" y1="0%" x2="100%" y2="100%">
-                                <stop offset="0%" style="stop-color:#6366f1"/>
-                                <stop offset="100%" style="stop-color:#4f46e5"/>
-                            </linearGradient>
-                        </defs>
-                        <rect width="512" height="512" rx="96" fill="url(#setupBg)"/>
-                        <rect x="156" y="116" width="200" height="280" rx="12" fill="white"/>
-                        <path d="M256 190 C256 190 206 240 206 270 C206 295 225 310 250 310 C250 310 242 335 234 350 L278 350 C270 335 262 310 262 310 C287 310 306 295 306 270 C306 240 256 190 256 190 Z" fill="#1a1a2e"/>
-                    </svg>
-                </div>
-                <h2>Welcome to Card Detection</h2>
-                <p>To detect playing cards, you'll need a free Roboflow API key.</p>
-
-                <div class="setup-steps">
-                    <div class="setup-step">
-                        <span class="step-number">1</span>
-                        <span>Sign up at <a href="https://app.roboflow.com" target="_blank">app.roboflow.com</a></span>
-                    </div>
-                    <div class="setup-step">
-                        <span class="step-number">2</span>
-                        <span>Go to Settings → API Keys</span>
-                    </div>
-                    <div class="setup-step">
-                        <span class="step-number">3</span>
-                        <span>Copy and paste your key below</span>
-                    </div>
-                </div>
-
-                <div class="setup-input">
-                    <input type="password" id="setupApiKeyInput" class="text-input" placeholder="Paste your API key here">
-                </div>
-
-                <button class="btn btn-primary" id="startDetectionBtn">Start Detecting</button>
-                <p class="setup-note">Your API key is stored locally and never shared.</p>
-            </div>
-        </div>
     </div>
 
     <script src="app.js"></script>

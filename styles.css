@@ -1,5 +1,7 @@
 /* CSS Reset and Variables */
-*, *::before, *::after {
+*,
+*::before,
+*::after {
     box-sizing: border-box;
     margin: 0;
     padding: 0;
@@ -21,7 +23,8 @@
     --transition: 0.3s ease;
 }
 
-html, body {
+html,
+body {
     height: 100%;
     overflow: hidden;
 }
@@ -222,17 +225,26 @@ body {
         transform: scale(0.5) rotateY(90deg);
         opacity: 0;
     }
+
     100% {
         transform: scale(1) rotateY(0deg);
         opacity: 1;
     }
 }
 
-.detected-card.hearts, .detected-card.diamonds, .detected-card.red-suit, .detected-card.h, .detected-card.d {
+.detected-card.hearts,
+.detected-card.diamonds,
+.detected-card.red-suit,
+.detected-card.h,
+.detected-card.d {
     color: #dc2626;
 }
 
-.detected-card.spades, .detected-card.clubs, .detected-card.black-suit, .detected-card.s, .detected-card.c {
+.detected-card.spades,
+.detected-card.clubs,
+.detected-card.black-suit,
+.detected-card.s,
+.detected-card.c {
     color: #1a1a2e;
 }
 
@@ -277,6 +289,62 @@ body {
     color: var(--success);
     font-weight: 600;
     margin-left: 4px;
+}
+
+/* API Status Indicator */
+.api-status {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 12px;
+    font-size: 0.875rem;
+}
+
+.api-status.hidden {
+    display: none;
+}
+
+.api-status-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+}
+
+.api-status.sending .api-status-icon::before {
+    content: "";
+    width: 14px;
+    height: 14px;
+    border: 2px solid var(--text-secondary);
+    border-top-color: var(--primary-color);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+.api-status.sending .api-status-text {
+    color: var(--text-secondary);
+}
+
+.api-status.success .api-status-icon::before {
+    content: "\2713";
+    color: var(--success);
+    font-weight: bold;
+}
+
+.api-status.success .api-status-text {
+    color: var(--success);
+}
+
+.api-status.error .api-status-icon::before {
+    content: "\2717";
+    color: var(--error);
+    font-weight: bold;
+}
+
+.api-status.error .api-status-text {
+    color: var(--error);
 }
 
 /* Error Container */
@@ -467,11 +535,11 @@ body {
     border-radius: 50%;
 }
 
-input:checked + .slider {
+input:checked+.slider {
     background-color: var(--primary-color);
 }
 
-input:checked + .slider::before {
+input:checked+.slider::before {
     transform: translateX(22px);
 }
 
@@ -598,61 +666,6 @@ input:checked + .slider::before {
     display: none !important;
 }
 
-/* PWA Install Banner */
-.install-banner {
-    position: fixed;
-    bottom: 80px;
-    left: 16px;
-    right: 16px;
-    background: var(--surface);
-    padding: 16px;
-    border-radius: var(--border-radius);
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    z-index: 50;
-    animation: slide-up 0.3s ease;
-}
-
-@keyframes slide-up {
-    from {
-        transform: translateY(100%);
-        opacity: 0;
-    }
-    to {
-        transform: translateY(0);
-        opacity: 1;
-    }
-}
-
-.install-banner-text {
-    flex: 1;
-}
-
-.install-banner-text strong {
-    display: block;
-    margin-bottom: 4px;
-}
-
-.install-banner-text span {
-    font-size: 0.875rem;
-    color: var(--text-secondary);
-}
-
-.install-banner .btn {
-    padding: 10px 16px;
-    font-size: 0.875rem;
-}
-
-.install-banner .close-btn {
-    position: absolute;
-    top: 8px;
-    right: 8px;
-    font-size: 1.25rem;
-    padding: 0;
-}
-
 /* Responsive adjustments */
 @media (min-width: 768px) {
     .detected-card {
@@ -670,105 +683,4 @@ input:checked + .slider::before {
     .footer {
         padding-bottom: calc(12px + env(safe-area-inset-bottom));
     }
-}
-
-/* Setup Wizard */
-.setup-wizard {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: var(--background);
-    z-index: 300;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 24px;
-}
-
-.setup-wizard.hidden {
-    display: none;
-}
-
-.setup-content {
-    max-width: 400px;
-    width: 100%;
-    text-align: center;
-}
-
-.setup-icon {
-    margin-bottom: 24px;
-}
-
-.setup-content h2 {
-    font-size: 1.5rem;
-    font-weight: 700;
-    margin-bottom: 12px;
-    letter-spacing: -0.025em;
-}
-
-.setup-content > p {
-    color: var(--text-secondary);
-    margin-bottom: 32px;
-}
-
-.setup-steps {
-    background: var(--surface);
-    border-radius: var(--border-radius);
-    padding: 20px;
-    margin-bottom: 24px;
-    text-align: left;
-}
-
-.setup-step {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 12px 0;
-}
-
-.setup-step:not(:last-child) {
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.step-number {
-    width: 28px;
-    height: 28px;
-    background: var(--primary-color);
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: 600;
-    font-size: 0.875rem;
-    flex-shrink: 0;
-}
-
-.setup-step a {
-    color: var(--primary-color);
-    text-decoration: none;
-}
-
-.setup-step a:hover {
-    text-decoration: underline;
-}
-
-.setup-input {
-    margin-bottom: 20px;
-}
-
-.setup-input .text-input {
-    text-align: center;
-    font-size: 1rem;
-}
-
-.setup-note {
-    margin-top: 16px;
-    font-size: 0.75rem;
-    color: var(--text-secondary);
-}
-
-#startDetectionBtn {
-    width: 100%;
 }

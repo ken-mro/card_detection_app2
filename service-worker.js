@@ -3,7 +3,7 @@
  * Provides offline caching and app shell support
  */
 
-const CACHE_NAME = 'card-detection-v1';
+const CACHE_NAME = 'card-detection-v2';
 const STATIC_ASSETS = [
     '/',
     '/index.html',
@@ -64,11 +64,6 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    // Skip Roboflow API calls - always go to network
-    if (url.hostname.includes('roboflow.com')) {
-        return;
-    }
-
     // Skip chrome-extension and other non-http protocols
     if (!url.protocol.startsWith('http')) {
         return;
@@ -94,6 +89,7 @@ self.addEventListener('fetch', (event) => {
                         // Clone response before caching
                         const responseToCache = response.clone();
 
+                        // Cache the response (including large model files)
                         caches.open(CACHE_NAME)
                             .then((cache) => {
                                 cache.put(request, responseToCache);
@@ -123,54 +119,4 @@ async function updateCache(request) {
     } catch (error) {
         // Silently fail - we have cached version
     }
-}
-
-// Handle push notifications (for future use)
-self.addEventListener('push', (event) => {
-    if (event.data) {
-        const data = event.data.json();
-        const options = {
-            body: data.body || 'Card Detection Update',
-            icon: '/icons/icon-192.png',
-            badge: '/icons/icon-192.png',
-            vibrate: [100, 50, 100]
-        };
-
-        event.waitUntil(
-            self.registration.showNotification(data.title || 'Card Detection', options)
-        );
-    }
-});
-
-// Handle notification clicks
-self.addEventListener('notificationclick', (event) => {
-    event.notification.close();
-
-    event.waitUntil(
-        clients.matchAll({ type: 'window', includeUncontrolled: true })
-            .then((windowClients) => {
-                // Focus existing window if available
-                for (const client of windowClients) {
-                    if ('focus' in client) {
-                        return client.focus();
-                    }
-                }
-                // Open new window
-                if (clients.openWindow) {
-                    return clients.openWindow('/');
-                }
-            })
-    );
-});
-
-// Background sync (for future use)
-self.addEventListener('sync', (event) => {
-    if (event.tag === 'sync-detections') {
-        event.waitUntil(syncDetections());
-    }
-});
-
-async function syncDetections() {
-    // Placeholder for syncing detection history
-    console.log('[ServiceWorker] Syncing detections...');
 }
