@@ -87,16 +87,16 @@ class CardDetectionApp {
         // Hide setup wizard (no API key needed for local model)
         this.hideSetupWizard();
 
-        // Load model and camera in parallel for faster startup
-        const modelPromise = this.loadModel();
-        const cameraPromise = this.startCamera();
+        // Load model first, then start camera
+        // This ensures detection works immediately when camera shows
+        await this.loadModel();
 
-        // Wait for both to complete
-        await Promise.all([modelPromise, cameraPromise]);
-
-        // Start detection if both are ready
-        if (this.modelLoaded && this.stream) {
-            this.startDetection();
+        // Only start camera after model is fully loaded
+        if (this.modelLoaded) {
+            await this.startCamera();
+            if (this.stream) {
+                this.startDetection();
+            }
         }
     }
 
@@ -296,6 +296,12 @@ class CardDetectionApp {
         try {
             this.stopCamera();
 
+            // Update loading message for camera initialization
+            const loadingText = document.getElementById('loadingText');
+            if (loadingText && !this.loadingOverlay.classList.contains('hidden')) {
+                loadingText.textContent = 'Starting camera...';
+            }
+
             // Optimized constraints for faster initialization
             const constraints = {
                 video: {
@@ -400,13 +406,15 @@ class CardDetectionApp {
 
         this.processingFrame = true;
         const startTime = performance.now();
+        let inputTensor = null;
+        let outputs = null;
 
         try {
             // Preprocess image
-            const inputTensor = this.preprocessImage();
+            inputTensor = this.preprocessImage();
 
             // Run inference
-            const outputs = await this.session.run({ images: inputTensor });
+            outputs = await this.session.run({ images: inputTensor });
 
             // Get output tensor and process
             const output = outputs[this.session.outputNames[0]];
@@ -434,6 +442,15 @@ class CardDetectionApp {
         } catch (error) {
             console.error('Detection error:', error);
         } finally {
+            // Dispose tensors to prevent memory leaks
+            if (inputTensor) {
+                inputTensor.dispose();
+            }
+            if (outputs) {
+                for (const key of Object.keys(outputs)) {
+                    outputs[key].dispose();
+                }
+            }
             this.processingFrame = false;
         }
     }
@@ -707,6 +724,7 @@ class CardDetectionApp {
     }
 
     showError(title, message) {
+        this.hideLoading();
         this.cameraContainer.classList.add('hidden');
         this.resultContainer.classList.add('hidden');
         this.errorContainer.classList.remove('hidden');
@@ -725,13 +743,21 @@ class CardDetectionApp {
     }
 
     showSettings() {
+        // Pause detection while settings are open for responsive UI
+        this.stopDetection();
         this.settingsPanel.classList.remove('hidden');
         setTimeout(() => this.settingsPanel.classList.add('visible'), 10);
     }
 
     hideSettings() {
         this.settingsPanel.classList.remove('visible');
-        setTimeout(() => this.settingsPanel.classList.add('hidden'), 300);
+        setTimeout(() => {
+            this.settingsPanel.classList.add('hidden');
+            // Resume detection if camera is active
+            if (this.stream && this.modelLoaded && !this.cameraContainer.classList.contains('hidden')) {
+                this.startDetection();
+            }
+        }, 300);
     }
 
     updateStatus(text, type) {
